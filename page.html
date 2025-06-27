@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Страница Page</title>
+    <style>
+        .back-button {
+            display: inline-block;
+            padding: 12px 24px;
+            background: linear-gradient(45deg, #4776E6, #8E54E9);
+            color: white;
+            font-family: 'Arial', sans-serif;
+            font-size: 16px;
+            font-weight: bold;
+            text-decoration: none;
+            border-radius: 30px;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(71, 118, 230, 0.4);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .back-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(71, 118, 230, 0.6);
+        }
+        
+        .back-button:active {
+            transform: translateY(1px);
+        }
+        
+        .container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 30px;
+            font-family: 'Arial', sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Добро пожаловать на page.html</h1>
+        <button class="back-button" onclick="window.location.href='index.html'">
+            Вернуться на Index.html
+        </button>
+    </div>
+</body>
+</html>
