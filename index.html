@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Главная страница</title>
+    <style>
+        .stylish-button {
+            display: inline-block;
+            padding: 12px 24px;
+            background: linear-gradient(45deg, #FF512F, #DD2476);
+            color: white;
+            font-family: 'Arial', sans-serif;
+            font-size: 16px;
+            font-weight: bold;
+            text-decoration: none;
+            border-radius: 30px;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(221, 36, 118, 0.4);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .stylish-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(221, 36, 118, 0.6);
+        }
+        
+        .stylish-button:active {
+            transform: translateY(1px);
+        }
+        
+        .container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <button class="stylish-button" onclick="window.location.href='page.html'">
+            Перейти на Page.html
+        </button>
+    </div>
+</body>
+</html>
