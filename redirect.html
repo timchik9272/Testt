@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Redirecting...</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <p>Redirecting...</p>
+  <script>
+    const SUPABASE_URL = "https://jkjahrrewfrcnfojpetn.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpramFocnJld2ZyY25mb2pwZXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxODE3MDEsImV4cCI6MjA3MDc1NzcwMX0.fisOkohi_LFNOj0j0iMMrZey8O_bPnQwhPcWhhTRqWY";
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    async function redirect() {
+      const shortCode = window.location.pathname.replace("/", "");
+      if (!shortCode) return;
+
+      const { data, error } = await sb.from("q").select("url").eq("short", shortCode).single();
+      if (error || !data) {
+        document.body.innerHTML = "<h1>Ссылка не найдена</h1>";
+        return;
+      }
+      window.location.href = data.url;
+    }
+
+    redirect();
+  </script>
+</body>
+</html>
