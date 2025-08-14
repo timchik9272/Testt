@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Сокращатель ссылок — Supabase</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 30px auto; }
+    input, button { padding: 8px; font-size: 16px; margin-top: 10px; }
+    .link-item { margin-top: 10px; }
+    a { color: blue; }
+  </style>
+</head>
+<body>
+  <h1>Сокращатель ссылок</h1>
+
+  <form id="shortenForm">
+    <label>
+      Вставьте ссылку:
+      <input type="url" id="urlInput" required placeholder="https://example.com" style="width:100%" />
+    </label>
+    <br>
+    <button type="submit">Сократить</button>
+  </form>
+
+  <h2>Ваши ссылки</h2>
+  <div id="linksList"></div>
+
+  <script>
+    const SUPABASE_URL = "https://jkjahrrewfrcnfojpetn.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpramFocnJld2ZyY25mb2pwZXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxODE3MDEsImV4cCI6MjA3MDc1NzcwMX0.fisOkohi_LFNOj0j0iMMrZey8O_bPnQwhPcWhhTRqWY";
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const form = document.getElementById("shortenForm");
+    const urlInput = document.getElementById("urlInput");
+    const linksList = document.getElementById("linksList");
+
+    // Генерация случайного короткого кода
+    function generateShortCode(length = 6) {
+      const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+      return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    }
+
+    // Загрузка всех ссылок
+    async function loadLinks() {
+      const { data, error } = await sb.from("q").select("*").order("id", { ascending: false });
+      if (error) {
+        console.error(error);
+        return;
+      }
+      linksList.innerHTML = data.map(row => `
+        <div class="link-item">
+          <a href="${row.url}" target="_blank">${row.url}</a>
+          <br>
+          Сокращённая: <a href="${window.location.origin}/${row.short}" target="_blank">${window.location.origin}/${row.short}</a>
+        </div>
+      `).join('');
+    }
+
+    // Обработка формы
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const originalUrl = urlInput.value.trim();
+      const shortCode = generateShortCode();
+
+      const { error } = await sb.from("q").insert([{ short: shortCode, url: originalUrl }]);
+      if (error) {
+        alert("Ошибка: " + error.message);
+        return;
+      }
+      urlInput.value = "";
+      loadLinks();
+    });
+
+    loadLinks();
+  </script>
+</body>
+</html>
