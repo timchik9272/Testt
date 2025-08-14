@@ -3,37 +3,83 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Сокращатель ссылок — vyy.netlify.app</title>
+  <title>Сокращатель ссылок</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <style>
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      margin: 0;
-      padding: 0;
-      background: #f7f8fa;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 20px;
+</head>
+<body>
+  <h1>Сокращатель ссылок</h1>
+  <form id="shortenForm">
+    <label>
+      Оригинальная ссылка:
+      <input type="url" id="urlInput" required placeholder="https://example.com" />
+    </label>
+    <label>
+      Свой короткий код (необязательно):
+      <input type="text" id="customCode" placeholder="Например: go" />
+    </label>
+    <button type="submit">Сократить</button>
+  </form>
+  <h2>Все ссылки</h2>
+  <div id="linksList"></div>
+
+  <script>
+    const SUPABASE_URL = "https://jkjahrrewfrcnfojpetn.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpramFocnJld2ZyY25mb2pwZXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxODE3MDEsImV4cCI6MjA3MDc1NzcwMX0.fisOkohi_LFNOj0j0iMMrZey8O_bPnQwhPcWhhTRqWY";
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const form = document.getElementById("shortenForm");
+    const urlInput = document.getElementById("urlInput");
+    const customCode = document.getElementById("customCode");
+    const linksList = document.getElementById("linksList");
+
+    async function checkAuth() {
+      const { data } = await sb.auth.getUser();
+      if (!data.user) {
+        alert("Сначала войдите!");
+        window.location.href = "/auth.html";
+      }
     }
-    h1 {
-      margin-bottom: 20px;
-      text-align: center;
-      color: #333;
+
+    function generateShortCode(length = 4) {
+      const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+      return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
     }
-    form {
-      background: white;
-      border-radius: 12px;
-      padding: 15px;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-      width: 100%;
-      max-width: 400px;
+
+    async function loadLinks() {
+      const { data, error } = await sb.from("q").select("short, url").order("id", { ascending: false });
+      if (error) return console.error(error);
+
+      linksList.innerHTML = data.map(row => `
+        <div>
+          Оригинал: <a href="${row.url}" target="_blank">${row.url}</a><br>
+          Сокращённая: <a href="/${row.short}" target="_blank">${window.location.origin}/${row.short}</a>
+        </div>
+      `).join('');
     }
-    label {
-      display: block;
-      margin-top: 10px;
-      font-size: 14px;
-      color: #555;
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      await checkAuth();
+      const originalUrl = urlInput.value.trim();
+      let shortCode = customCode.value.trim() || generateShortCode();
+
+      const { data: exists } = await sb.from("q").select("short").eq("short", shortCode);
+      if (exists && exists.length > 0) {
+        return alert("Код занят!");
+      }
+
+      const { error } = await sb.from("q").insert([{ short: shortCode, url: originalUrl }]);
+      if (error) return alert("Ошибка: " + error.message);
+
+      urlInput.value = "";
+      customCode.value = "";
+      loadLinks();
+    });
+
+    loadLinks();
+  </script>
+</body>
+</html>
     }
     input {
       width: 100%;
