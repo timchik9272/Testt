@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <title>Сокращатель ссылок — Supabase</title>
+  <meta charset="UTF-8">
+  <title>Сокращатель ссылок — vyy.netlify.app</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     body { font-family: sans-serif; max-width: 600px; margin: 30px auto; }
     input, button { padding: 8px; font-size: 16px; margin-top: 10px; }
-    .link-item { margin-top: 10px; }
+    .link-item { margin-top: 10px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
     a { color: blue; }
   </style>
 </head>
@@ -35,13 +35,11 @@
     const urlInput = document.getElementById("urlInput");
     const linksList = document.getElementById("linksList");
 
-    // Генерация случайного короткого кода
     function generateShortCode(length = 6) {
       const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
       return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
     }
 
-    // Загрузка всех ссылок
     async function loadLinks() {
       const { data, error } = await sb.from("q").select("*").order("id", { ascending: false });
       if (error) {
@@ -50,14 +48,12 @@
       }
       linksList.innerHTML = data.map(row => `
         <div class="link-item">
-          <a href="${row.url}" target="_blank">${row.url}</a>
-          <br>
-          Сокращённая: <a href="${window.location.origin}/${row.short}" target="_blank">${window.location.origin}/${row.short}</a>
+          <div>Оригинал: <a href="${row.url}" target="_blank">${row.url}</a></div>
+          <div>Сокращённая: <a href="https://vyy.netlify.app/${row.short}" target="_blank">https://vyy.netlify.app/${row.short}</a></div>
         </div>
       `).join('');
     }
 
-    // Обработка формы
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const originalUrl = urlInput.value.trim();
