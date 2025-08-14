@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Вход / Регистрация</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+  <h1>Вход или регистрация</h1>
+  <form id="authForm">
+    <input type="email" id="email" placeholder="Введите email" required>
+    <input type="password" id="password" placeholder="Введите пароль" required>
+    <button type="submit">Войти / Зарегистрироваться</button>
+  </form>
+  <button id="logoutBtn" style="display:none;">Выйти</button>
+
+  <script>
+    const SUPABASE_URL = "https://jkjahrrewfrcnfojpetn.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpramFocnJld2ZyY25mb2pwZXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxODE3MDEsImV4cCI6MjA3MDc1NzcwMX0.fisOkohi_LFNOj0j0iMMrZey8O_bPnQwhPcWhhTRqWY";
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const form = document.getElementById("authForm");
+    const logoutBtn = document.getElementById("logoutBtn");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value.trim();
+
+      let { error } = await sb.auth.signInWithPassword({ email, password });
+
+      if (error && error.message.includes("Invalid login credentials")) {
+        ({ error } = await sb.auth.signUp({ email, password }));
+      }
+
+      if (error) {
+        alert("Ошибка: " + error.message);
+        return;
+      }
+
+      window.location.href = "/";
+    });
+
+    logoutBtn.addEventListener("click", async () => {
+      await sb.auth.signOut();
+      window.location.reload();
+    });
+
+    async function checkUser() {
+      const { data } = await sb.auth.getUser();
+      if (data.user) {
+        logoutBtn.style.display = "block";
+        form.style.display = "none";
+      }
+    }
+
+    checkUser();
+  </script>
+</body>
+</html>
