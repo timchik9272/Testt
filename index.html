@@ -2,13 +2,92 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Сокращатель ссылок — vyy.netlify.app</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    body { font-family: sans-serif; max-width: 600px; margin: 30px auto; }
-    input, button { padding: 8px; font-size: 16px; margin-top: 10px; }
-    .link-item { margin-top: 10px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
-    a { color: blue; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f7f8fa;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    h1 {
+      margin-bottom: 20px;
+      text-align: center;
+      color: #333;
+    }
+    form {
+      background: white;
+      border-radius: 12px;
+      padding: 15px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      width: 100%;
+      max-width: 400px;
+    }
+    label {
+      display: block;
+      margin-top: 10px;
+      font-size: 14px;
+      color: #555;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      font-size: 16px;
+      margin-top: 5px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input:focus {
+      border-color: #0077ff;
+    }
+    button {
+      margin-top: 15px;
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      background: #0077ff;
+      color: white;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background: #005fd1;
+    }
+    h2 {
+      margin-top: 30px;
+      color: #333;
+    }
+    .link-item {
+      background: white;
+      border-radius: 8px;
+      padding: 12px;
+      margin-top: 10px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+      font-size: 14px;
+    }
+    .link-item a {
+      color: #0077ff;
+      text-decoration: none;
+      word-break: break-all;
+    }
+    @media (max-width: 500px) {
+      body {
+        padding: 10px;
+      }
+      form, .link-item {
+        padding: 12px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -16,14 +95,17 @@
 
   <form id="shortenForm">
     <label>
-      Вставьте ссылку:
-      <input type="url" id="urlInput" required placeholder="https://example.com" style="width:100%" />
+      Оригинальная ссылка:
+      <input type="url" id="urlInput" required placeholder="https://example.com" />
     </label>
-    <br>
+    <label>
+      Свой короткий код (необязательно):
+      <input type="text" id="customCode" placeholder="Например: go" />
+    </label>
     <button type="submit">Сократить</button>
   </form>
 
-  <h2>Ваши ссылки</h2>
+  <h2>Все ссылки</h2>
   <div id="linksList"></div>
 
   <script>
@@ -33,9 +115,10 @@
 
     const form = document.getElementById("shortenForm");
     const urlInput = document.getElementById("urlInput");
+    const customCode = document.getElementById("customCode");
     const linksList = document.getElementById("linksList");
 
-    function generateShortCode(length = 6) {
+    function generateShortCode(length = 4) {
       const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
       return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
     }
@@ -57,7 +140,14 @@
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const originalUrl = urlInput.value.trim();
-      const shortCode = generateShortCode();
+      let shortCode = customCode.value.trim() || generateShortCode();
+
+      // Проверка на занятость кода
+      const { data: exists } = await sb.from("q").select("short").eq("short", shortCode);
+      if (exists && exists.length > 0) {
+        alert("Этот код уже занят, выберите другой.");
+        return;
+      }
 
       const { error } = await sb.from("q").insert([{ short: shortCode, url: originalUrl }]);
       if (error) {
@@ -65,6 +155,7 @@
         return;
       }
       urlInput.value = "";
+      customCode.value = "";
       loadLinks();
     });
 
