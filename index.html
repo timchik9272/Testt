@@ -70,6 +70,7 @@
     .empty{padding:10px 4px; color:var(--muted)}
     .auth-link{font-weight:700; text-decoration:none}
     footer{margin-top:16px; color:var(--muted); font-size:12px}
+    /* NEW: стили опасной кнопки */
     .danger{ border:1px solid #fca5a5; color:#b91c1c; background:#fff; }
     .danger:hover{ background:#fee2e2; }
   </style>
@@ -80,9 +81,7 @@
       <div class="brand">vyy • сокращатель</div>
       <div class="top-actions">
         <span id="status" class="status">Статус: Гость</span>
-        <a id="authBtn" class="pill ghost auth-link" href="/auth.html">Войти / Регистрация</a>
-        <button id="logoutBtn" class="pill ghost" style="display:none">Выйти</button>
-        <button id="deleteAccBtn" class="pill danger" style="display:none">Удалить аккаунт</button>
+        <a class="pill ghost auth-link" href="/auth.html">Войти / Регистрация</a>
       </div>
     </div>
 
@@ -117,21 +116,19 @@
 
   <script>
     const SUPABASE_URL = "https://jkjahrrewfrcnfojpetn.supabase.co";
-    const SUPABASE_KEY = "YOUR_KEY"; // вставь свой
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpramFocnJld2ZyY25mb2pwZXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxODE3MDEsImV4cCI6MjA3MDc1NzcwMX0.fisOkohi_LFNOj0j0iMMrZey8O_bPnQwhPcWhhTRqWY";
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     const ADMIN_UID = "f34c5c47-5a4f-4006-ac9e-a4288448d09b";
 
     const statusEl = document.getElementById("status");
-    const authBtn = document.getElementById("authBtn");
-    const logoutBtn = document.getElementById("logoutBtn");
-    const deleteAccBtn = document.getElementById("deleteAccBtn");
+    const form = document.getElementById("shortenForm");
     const urlInput = document.getElementById("urlInput");
     const customCode = document.getElementById("customCode");
     const linksList = document.getElementById("linksList");
     const emptyState = document.getElementById("emptyState");
     const refreshBtn = document.getElementById("refreshBtn");
 
-    let IS_ADMIN = false;
+    let IS_ADMIN = false; // NEW
 
     function generateShortCode(length = 4) {
       const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -147,50 +144,38 @@
       if (!user) {
         IS_ADMIN = false;
         statusEl.textContent = "Статус: Гость";
-        authBtn.style.display = "inline-block";
-        logoutBtn.style.display = "none";
-        deleteAccBtn.style.display = "none";
         return;
       }
       IS_ADMIN = (user.id === ADMIN_UID);
       statusEl.textContent = IS_ADMIN ? "Статус: Админ" : "Статус: Пользователь";
-      authBtn.style.display = "none";
-      logoutBtn.style.display = "inline-block";
-      deleteAccBtn.style.display = "inline-block";
-    }
-
-    async function logout() {
-      await sb.auth.signOut();
-      location.reload();
-    }
-
-    async function deleteAccount() {
-      const { data: { user } } = await sb.auth.getUser();
-      if (!user) return;
-      // Удаляем все его ссылки
-      await sb.from("q").delete().eq("user_id", user.id);
-      // Удаляем пользователя
-      await sb.auth.admin.deleteUser(user.id);
-      alert("Аккаунт удалён");
-      location.reload();
     }
 
     function attachCopyHandlers() {
       document.querySelectorAll(".copy[data-copy]").forEach(btn=>{
         btn.onclick = async () => {
-          await navigator.clipboard.writeText(btn.getAttribute("data-copy"));
-          btn.textContent = "Скопировано ✓";
-          setTimeout(()=> btn.textContent="Копировать", 1200);
+          try {
+            await navigator.clipboard.writeText(btn.getAttribute("data-copy"));
+            btn.textContent = "Скопировано ✓";
+            setTimeout(()=> btn.textContent="Копировать", 1200);
+          } catch(e){ alert("Не удалось скопировать"); }
         };
       });
     }
 
+    // NEW: обработчики удаления (только для админа)
     function attachDeleteHandlers() {
       document.querySelectorAll(".btn-delete").forEach(btn=>{
         btn.onclick = async () => {
           const id = btn.getAttribute("data-id");
-          await sb.from("q").delete().eq("id", id).limit(1);
-          loadLinks();
+          const short = btn.getAttribute("data-short");
+          if (!confirm(`Удалить ссылку «${short}»?`)) return;
+          const { error } = await sb.from("q").delete().eq("id", id).limit(1);
+          if (error) {
+            alert("Ошибка удаления: " + error.message);
+            return;
+          }
+          btn.textContent = "Удалено ✓";
+          setTimeout(loadLinks, 300);
         };
       });
     }
@@ -210,22 +195,25 @@
             <div><span class="muted">Сокращённая:</span> <a class="link mono" href="${shortUrl}" target="_blank">${shortUrl}</a></div>
             <div style="display:flex; gap:8px; margin-top:6px">
               <button class="copy" data-copy="${shortUrl}">Копировать</button>
-              <a class="copy" href="${shortUrl}" target="_blank">Открыть</a>
-              ${IS_ADMIN ? `<button class="copy danger btn-delete" data-id="${row.id}">Удалить</button>` : ``}
+              <a class="copy" href="${shortUrl}" target="_blank" style="text-decoration:none; display:inline-flex; align-items:center">Открыть</a>
+              ${IS_ADMIN ? `<button class="copy danger btn-delete" data-id="${row.id}" data-short="${row.short}">Удалить</button>` : ``}
             </div>
           </div>
         `;
       }).join("");
       attachCopyHandlers();
-      if (IS_ADMIN) attachDeleteHandlers();
+      if (IS_ADMIN) attachDeleteHandlers(); // NEW
     }
 
     async function loadLinks() {
       const { data, error } = await sb.from("q").select("*").order("id", { ascending: false });
-      if (!error) renderList(data);
+      if (error) { console.error(error); return; }
+      renderList(data);
     }
 
-    document.getElementById("shortenForm").addEventListener("submit", async (e) => {
+    refreshBtn.addEventListener("click", loadLinks);
+
+    form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const originalUrl = urlInput.value.trim();
       if (!/^https?:\/\//i.test(originalUrl)) {
@@ -234,17 +222,23 @@
       }
       let shortCode = customCode.value.trim() || generateShortCode(4);
       shortCode = sanitizeCode(shortCode);
-      const { data: exists } = await sb.from("q").select("short").eq("short", shortCode).limit(1);
-      if (exists?.length) return alert("Этот код уже занят.");
-      await sb.from("q").insert([{ short: shortCode, url: originalUrl }]);
+      if (!shortCode) {
+        alert("Неверный код");
+        return;
+      }
+      const { data: exists, error: checkErr } = await sb.from("q").select("short").eq("short", shortCode).limit(1);
+      if (checkErr) { alert("Ошибка проверки кода: " + checkErr.message); return; }
+      if (exists && exists.length > 0) {
+        alert("Этот код уже занят, выберите другой.");
+        return;
+      }
+      const { error } = await sb.from("q").insert([{ short: shortCode, url: originalUrl }]);
+      if (error) { alert("Ошибка: " + error.message); return; }
       urlInput.value = ""; customCode.value = "";
       loadLinks();
     });
 
-    logoutBtn.addEventListener("click", logout);
-    deleteAccBtn.addEventListener("click", deleteAccount);
-    refreshBtn.addEventListener("click", loadLinks);
-
+    // ждём определение статуса и только потом рендерим список, чтобы сразу показать/скрыть «Удалить»
     (async () => {
       await updateStatus();
       await loadLinks();
