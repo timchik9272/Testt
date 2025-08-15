@@ -2,38 +2,28 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Redirecting…</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <style>
-    body{margin:0; min-height:100dvh; display:grid; place-items:center; font-family:system-ui,Segoe UI,Roboto,Inter,Arial}
-    .card{padding:18px 20px; border-radius:14px; box-shadow:0 6px 18px rgba(0,0,0,.08); background:#fff; text-align:center}
-    .muted{color:#6b7280}
-  </style>
+  <title>Перенаправление...</title>
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <div class="card">
-    <div id="msg">Идёт перенаправление…</div>
-    <div class="muted" style="margin-top:6px">Если не произошло — проверьте код ссылки.</div>
-  </div>
-  <script>
-    const SUPABASE_URL = "https://jkjahrrewfrcnfojpetn.supabase.co";
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpramFocnJld2ZyY25mb2pwZXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxODE3MDEsImV4cCI6MjA3MDc1NzcwMX0.fisOkohi_LFNOj0j0iMMrZey8O_bPnQwhPcWhhTRqWY";
-    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+<script>
+const supabase = supabase.createClient(
+  "https://jkjahrrewfrcnfojpetn.supabase.co",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpramFocnJld2ZyY25mb2pwZXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxODE3MDEsImV4cCI6MjA3MDc1NzcwMX0.fisOkohi_LFNOj0j0iMMrZey8O_bPnQwhPcWhhTRqWY"
+);
 
-    async function redirect() {
-      const shortCode = decodeURIComponent(window.location.pathname.replace(/^\//,''));
-      if (!shortCode) { document.getElementById("msg").textContent = "Код не указан"; return; }
-      const { data, error } = await sb.from("q").select("url").eq("short", shortCode).single();
-      if (error || !data) {
-        document.getElementById("msg").textContent = "Ссылка не найдена";
-        return;
-      }
-      // небольшая задержка для UX
-      setTimeout(()=> { window.location.href = data.url; }, 100);
-    }
-    redirect();
-  </script>
+(async () => {
+  const short = window.location.pathname.replace("/", "");
+  if (!short) return;
+  const { data } = await supabase.from("q").select("url").eq("short", short).single();
+  if (data && data.url) {
+    window.location.href = data.url;
+  } else {
+    document.body.innerHTML = "<h2>Ссылка не найдена</h2>";
+  }
+})();
+</script>
 </body>
 </html>
+
 
