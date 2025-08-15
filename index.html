@@ -70,7 +70,6 @@
     .empty{padding:10px 4px; color:var(--muted)}
     .auth-link{font-weight:700; text-decoration:none}
     footer{margin-top:16px; color:var(--muted); font-size:12px}
-    /* NEW: стили опасной кнопки */
     .danger{ border:1px solid #fca5a5; color:#b91c1c; background:#fff; }
     .danger:hover{ background:#fee2e2; }
   </style>
@@ -102,7 +101,7 @@
       </form>
     </div>
 
-    <div class="card">
+    <div class="card" id="linksCard">
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px">
         <h3 style="margin:0; font-size:18px">Все ссылки</h3>
         <button id="refreshBtn" class="copy">Обновить</button>
@@ -127,8 +126,10 @@
     const linksList = document.getElementById("linksList");
     const emptyState = document.getElementById("emptyState");
     const refreshBtn = document.getElementById("refreshBtn");
+    const linksCard = document.getElementById("linksCard");
 
-    let IS_ADMIN = false; // NEW
+    let IS_ADMIN = false;
+    let CURRENT_USER = null;
 
     function generateShortCode(length = 4) {
       const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -143,11 +144,15 @@
       const { data: { user } } = await sb.auth.getUser();
       if (!user) {
         IS_ADMIN = false;
+        CURRENT_USER = null;
         statusEl.textContent = "Статус: Гость";
+        linksCard.style.display = "none"; // скрываем блок со ссылками
         return;
       }
       IS_ADMIN = (user.id === ADMIN_UID);
-      statusEl.textContent = IS_ADMIN ? "Статус: Админ" : "Статус: Пользователь";
+      CURRENT_USER = user;
+      statusEl.textContent = `${IS_ADMIN ? "Статус: Админ" : "Статус: Пользователь"} — ${user.email}`;
+      linksCard.style.display = "block";
     }
 
     function attachCopyHandlers() {
@@ -162,7 +167,6 @@
       });
     }
 
-    // NEW: обработчики удаления (только для админа)
     function attachDeleteHandlers() {
       document.querySelectorAll(".btn-delete").forEach(btn=>{
         btn.onclick = async () => {
@@ -191,6 +195,7 @@
         const shortUrl = `${window.location.origin}/${row.short}`;
         return `
           <div class="item">
+            <div><span class="muted">Email автора:</span> ${row.email || "—"}</div>
             <div><span class="muted">Оригинал:</span> <a class="link" href="${row.url}" target="_blank">${row.url}</a></div>
             <div><span class="muted">Сокращённая:</span> <a class="link mono" href="${shortUrl}" target="_blank">${shortUrl}</a></div>
             <div style="display:flex; gap:8px; margin-top:6px">
@@ -202,11 +207,21 @@
         `;
       }).join("");
       attachCopyHandlers();
-      if (IS_ADMIN) attachDeleteHandlers(); // NEW
+      if (IS_ADMIN) attachDeleteHandlers();
     }
 
     async function loadLinks() {
-      const { data, error } = await sb.from("q").select("*").order("id", { ascending: false });
+      if (!CURRENT_USER && !IS_ADMIN) {
+        linksList.innerHTML = "";
+        emptyState.style.display = "block";
+        return;
+      }
+
+      let query = sb.from("q").select("*").order("id", { ascending: false });
+      if (!IS_ADMIN) {
+        query = query.eq("user_id", CURRENT_USER.id);
+      }
+      const { data, error } = await query;
       if (error) { console.error(error); return; }
       renderList(data);
     }
@@ -215,6 +230,10 @@
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (!CURRENT_USER) {
+        alert("Для сокращения ссылок нужно войти в аккаунт");
+        return;
+      }
       const originalUrl = urlInput.value.trim();
       if (!/^https?:\/\//i.test(originalUrl)) {
         alert("Добавь http:// или https:// в начало ссылки");
@@ -232,13 +251,17 @@
         alert("Этот код уже занят, выберите другой.");
         return;
       }
-      const { error } = await sb.from("q").insert([{ short: shortCode, url: originalUrl }]);
+      const { error } = await sb.from("q").insert([{
+        short: shortCode,
+        url: originalUrl,
+        user_id: CURRENT_USER.id,
+        email: CURRENT_USER.email
+      }]);
       if (error) { alert("Ошибка: " + error.message); return; }
       urlInput.value = ""; customCode.value = "";
       loadLinks();
     });
 
-    // ждём определение статуса и только потом рендерим список, чтобы сразу показать/скрыть «Удалить»
     (async () => {
       await updateStatus();
       await loadLinks();
