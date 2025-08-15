@@ -70,6 +70,9 @@
     .empty{padding:10px 4px; color:var(--muted)}
     .auth-link{font-weight:700; text-decoration:none}
     footer{margin-top:16px; color:var(--muted); font-size:12px}
+    /* NEW: стили опасной кнопки */
+    .danger{ border:1px solid #fca5a5; color:#b91c1c; background:#fff; }
+    .danger:hover{ background:#fee2e2; }
   </style>
 </head>
 <body>
@@ -125,23 +128,56 @@
     const emptyState = document.getElementById("emptyState");
     const refreshBtn = document.getElementById("refreshBtn");
 
+    let IS_ADMIN = false; // NEW
+
     function generateShortCode(length = 4) {
       const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
       return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
     }
 
     function sanitizeCode(code) {
-      // Разрешаем URL-safe символы (сжатый whitelist)
       return code.replace(/[^A-Za-z0-9\-_.~]/g, "").slice(0, 32);
     }
 
     async function updateStatus() {
       const { data: { user } } = await sb.auth.getUser();
       if (!user) {
+        IS_ADMIN = false;
         statusEl.textContent = "Статус: Гость";
         return;
       }
-      statusEl.textContent = (user.id === ADMIN_UID) ? "Статус: Админ" : "Статус: Пользователь";
+      IS_ADMIN = (user.id === ADMIN_UID);
+      statusEl.textContent = IS_ADMIN ? "Статус: Админ" : "Статус: Пользователь";
+    }
+
+    function attachCopyHandlers() {
+      document.querySelectorAll(".copy[data-copy]").forEach(btn=>{
+        btn.onclick = async () => {
+          try {
+            await navigator.clipboard.writeText(btn.getAttribute("data-copy"));
+            btn.textContent = "Скопировано ✓";
+            setTimeout(()=> btn.textContent="Копировать", 1200);
+          } catch(e){ alert("Не удалось скопировать"); }
+        };
+      });
+    }
+
+    // NEW: обработчики удаления (только для админа)
+    function attachDeleteHandlers() {
+      document.querySelectorAll(".btn-delete").forEach(btn=>{
+        btn.onclick = async () => {
+          const id = btn.getAttribute("data-id");
+          const short = btn.getAttribute("data-short");
+          if (!confirm(`Удалить ссылку «${short}»?`)) return;
+          const { error } = await sb.from("q").delete().eq("id", id).limit(1);
+          if (error) {
+            alert("Ошибка удаления: " + error.message);
+            return;
+          }
+          btn.textContent = "Удалено ✓";
+          setTimeout(loadLinks, 300);
+        };
+      });
     }
 
     function renderList(rows) {
@@ -160,20 +196,13 @@
             <div style="display:flex; gap:8px; margin-top:6px">
               <button class="copy" data-copy="${shortUrl}">Копировать</button>
               <a class="copy" href="${shortUrl}" target="_blank" style="text-decoration:none; display:inline-flex; align-items:center">Открыть</a>
+              ${IS_ADMIN ? `<button class="copy danger btn-delete" data-id="${row.id}" data-short="${row.short}">Удалить</button>` : ``}
             </div>
           </div>
         `;
       }).join("");
-      // навесим обработчики копирования
-      document.querySelectorAll(".copy[data-copy]").forEach(btn=>{
-        btn.onclick = async () => {
-          try {
-            await navigator.clipboard.writeText(btn.getAttribute("data-copy"));
-            btn.textContent = "Скопировано ✓";
-            setTimeout(()=> btn.textContent="Копировать", 1200);
-          } catch(e){ alert("Не удалось скопировать"); }
-        };
-      });
+      attachCopyHandlers();
+      if (IS_ADMIN) attachDeleteHandlers(); // NEW
     }
 
     async function loadLinks() {
@@ -197,7 +226,6 @@
         alert("Неверный код");
         return;
       }
-      // проверим занятость кода
       const { data: exists, error: checkErr } = await sb.from("q").select("short").eq("short", shortCode).limit(1);
       if (checkErr) { alert("Ошибка проверки кода: " + checkErr.message); return; }
       if (exists && exists.length > 0) {
@@ -210,8 +238,13 @@
       loadLinks();
     });
 
-    updateStatus();
-    loadLinks();
+    // ждём определение статуса и только потом рендерим список, чтобы сразу показать/скрыть «Удалить»
+    (async () => {
+      await updateStatus();
+      await loadLinks();
+    })();
   </script>
 </body>
+</html>
+
 </html>
