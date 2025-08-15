@@ -1,107 +1,35 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Сокращатель ссылок — vyy.netlify.app</title>
+  <meta charset="UTF-8" />
+  <title>Сокращатель ссылок</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body {
-      font-family: 'Segoe UI', sans-serif;
-      margin: 0;
-      padding: 0;
-      background: #f7f8fa;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 20px;
-    }
-    h1 {
-      margin-bottom: 20px;
-      text-align: center;
-      color: #333;
-    }
-    form {
-      background: white;
-      border-radius: 12px;
-      padding: 15px;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-      width: 100%;
-      max-width: 400px;
-    }
-    label {
-      display: block;
-      margin-top: 10px;
-      font-size: 14px;
-      color: #555;
-    }
-    input {
-      width: 100%;
-      padding: 10px;
-      font-size: 16px;
-      margin-top: 5px;
-      border: 1px solid #ccc;
-      border-radius: 8px;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-    input:focus {
-      border-color: #0077ff;
-    }
-    button {
-      margin-top: 15px;
-      width: 100%;
-      padding: 12px;
-      font-size: 16px;
-      border: none;
-      border-radius: 8px;
-      background: #0077ff;
-      color: white;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    button:hover {
-      background: #005fd1;
-    }
-    h2 {
-      margin-top: 30px;
-      color: #333;
-    }
-    .link-item {
-      background: white;
-      border-radius: 8px;
-      padding: 12px;
-      margin-top: 10px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-      font-size: 14px;
-    }
-    .link-item a {
-      color: #0077ff;
-      text-decoration: none;
-      word-break: break-all;
-    }
-    @media (max-width: 500px) {
-      body {
-        padding: 10px;
-      }
-      form, .link-item {
-        padding: 12px;
-      }
-    }
+    body { font-family: sans-serif; max-width: 600px; margin: 20px auto; padding: 10px; }
+    input, button { padding: 8px; font-size: 16px; margin-top: 10px; width: 100%; box-sizing: border-box; }
+    .link-item { margin-top: 10px; background: #f2f2f2; padding: 8px; border-radius: 6px; }
+    a { color: blue; word-break: break-all; }
+    .status { margin: 10px 0; font-weight: bold; }
   </style>
 </head>
 <body>
   <h1>Сокращатель ссылок</h1>
+  
+  <div class="status" id="status">Статус: Гость</div>
+
+  <div id="authForms">
+    <input type="email" id="email" placeholder="Email">
+    <input type="password" id="password" placeholder="Пароль">
+    <button id="loginBtn">Войти</button>
+    <button id="signupBtn">Регистрация</button>
+  </div>
+
+  <button id="logoutBtn" style="display:none;">Выйти</button>
 
   <form id="shortenForm">
-    <label>
-      Оригинальная ссылка:
-      <input type="url" id="urlInput" required placeholder="https://example.com" />
-    </label>
-    <label>
-      Свой короткий код (необязательно):
-      <input type="text" id="customCode" placeholder="Например: go" />
-    </label>
+    <input type="url" id="urlInput" required placeholder="https://example.com" />
+    <input type="text" id="customCode" placeholder="Код (необязательно)" />
     <button type="submit">Сократить</button>
   </form>
 
@@ -113,14 +41,40 @@
     const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpramFocnJld2ZyY25mb2pwZXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxODE3MDEsImV4cCI6MjA3MDc1NzcwMX0.fisOkohi_LFNOj0j0iMMrZey8O_bPnQwhPcWhhTRqWY";
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+    const statusEl = document.getElementById("status");
+    const loginBtn = document.getElementById("loginBtn");
+    const signupBtn = document.getElementById("signupBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const emailInput = document.getElementById("email");
+    const passInput = document.getElementById("password");
+
     const form = document.getElementById("shortenForm");
     const urlInput = document.getElementById("urlInput");
     const customCode = document.getElementById("customCode");
     const linksList = document.getElementById("linksList");
 
+    const ADMIN_UID = "f34c5c47-5a4f-4006-ac9e-a4288448d09b";
+
     function generateShortCode(length = 4) {
       const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
       return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    }
+
+    async function updateStatus() {
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user) {
+        statusEl.textContent = "Статус: Гость";
+        logoutBtn.style.display = "none";
+        document.getElementById("authForms").style.display = "block";
+      } else {
+        logoutBtn.style.display = "block";
+        document.getElementById("authForms").style.display = "none";
+        if (user.id === ADMIN_UID) {
+          statusEl.textContent = "Статус: Админ";
+        } else {
+          statusEl.textContent = "Статус: Пользователь";
+        }
+      }
     }
 
     async function loadLinks() {
@@ -131,8 +85,9 @@
       }
       linksList.innerHTML = data.map(row => `
         <div class="link-item">
-          <div>Оригинал: <a href="${row.url}" target="_blank">${row.url}</a></div>
-          <div>Сокращённая: <a href="https://vyy.netlify.app/${row.short}" target="_blank">https://vyy.netlify.app/${row.short}</a></div>
+          <a href="${row.url}" target="_blank">${row.url}</a>
+          <br>
+          Сокращённая: <a href="${window.location.origin}/${row.short}" target="_blank">${window.location.origin}/${row.short}</a>
         </div>
       `).join('');
     }
@@ -141,15 +96,10 @@
       e.preventDefault();
       const originalUrl = urlInput.value.trim();
       let shortCode = customCode.value.trim() || generateShortCode();
+      const { data: { user } } = await sb.auth.getUser();
 
-      // Проверка на занятость кода
-      const { data: exists } = await sb.from("q").select("short").eq("short", shortCode);
-      if (exists && exists.length > 0) {
-        alert("Этот код уже занят, выберите другой.");
-        return;
-      }
-
-      const { error } = await sb.from("q").insert([{ short: shortCode, url: originalUrl }]);
+      const insertData = { short: shortCode, url: originalUrl };
+      const { error } = await sb.from("q").insert([insertData]);
       if (error) {
         alert("Ошибка: " + error.message);
         return;
@@ -159,6 +109,30 @@
       loadLinks();
     });
 
+    loginBtn.addEventListener("click", async () => {
+      const { error } = await sb.auth.signInWithPassword({
+        email: emailInput.value,
+        password: passInput.value
+      });
+      if (error) alert(error.message);
+      updateStatus();
+    });
+
+    signupBtn.addEventListener("click", async () => {
+      const { error } = await sb.auth.signUp({
+        email: emailInput.value,
+        password: passInput.value
+      });
+      if (error) alert(error.message);
+      else alert("Регистрация успешна! Проверьте почту для подтверждения.");
+    });
+
+    logoutBtn.addEventListener("click", async () => {
+      await sb.auth.signOut();
+      updateStatus();
+    });
+
+    updateStatus();
     loadLinks();
   </script>
 </body>
