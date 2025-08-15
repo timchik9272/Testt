@@ -80,7 +80,8 @@
       <div class="brand">vyy • сокращатель</div>
       <div class="top-actions">
         <span id="status" class="status">Статус: Гость</span>
-        <a class="pill ghost auth-link" href="/auth.html">Войти / Регистрация</a>
+        <a id="loginLink" class="pill ghost auth-link" href="/auth.html">Войти / Регистрация</a>
+        <button id="logoutBtn" class="pill ghost" style="display:none;">Выйти</button>
       </div>
     </div>
 
@@ -127,6 +128,8 @@
     const emptyState = document.getElementById("emptyState");
     const refreshBtn = document.getElementById("refreshBtn");
     const linksCard = document.getElementById("linksCard");
+    const loginLink = document.getElementById("loginLink");
+    const logoutBtn = document.getElementById("logoutBtn");
 
     let IS_ADMIN = false;
     let CURRENT_USER = null;
@@ -146,14 +149,25 @@
         IS_ADMIN = false;
         CURRENT_USER = null;
         statusEl.textContent = "Статус: Гость";
-        linksCard.style.display = "none"; // скрываем блок со ссылками
+        linksCard.style.display = "none";
+        loginLink.style.display = "inline-block";
+        logoutBtn.style.display = "none";
         return;
       }
       IS_ADMIN = (user.id === ADMIN_UID);
       CURRENT_USER = user;
       statusEl.textContent = `${IS_ADMIN ? "Статус: Админ" : "Статус: Пользователь"} — ${user.email}`;
       linksCard.style.display = "block";
+      loginLink.style.display = "none";
+      logoutBtn.style.display = "inline-block";
     }
+
+    logoutBtn.addEventListener("click", async () => {
+      await sb.auth.signOut();
+      await updateStatus();
+      linksList.innerHTML = "";
+      emptyState.style.display = "block";
+    });
 
     function attachCopyHandlers() {
       document.querySelectorAll(".copy[data-copy]").forEach(btn=>{
@@ -216,7 +230,6 @@
         emptyState.style.display = "block";
         return;
       }
-
       let query = sb.from("q").select("*").order("id", { ascending: false });
       if (!IS_ADMIN) {
         query = query.eq("user_id", CURRENT_USER.id);
@@ -269,3 +282,4 @@
   </script>
 </body>
 </html>
+
