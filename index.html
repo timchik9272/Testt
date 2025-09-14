@@ -188,10 +188,10 @@
           })
         });
         const data = await response.json();
-        return Object.keys(data).length > 0; // Если ответ не пустой, URL небезопасен
+        return Object.keys(data).length > 0;
       } catch (e) {
         console.error("Ошибка проверки безопасности:", e);
-        return false; // В случае ошибки разрешаем ссылку
+        return false;
       }
     }
 
@@ -233,7 +233,10 @@
       }
       emptyState.style.display = "none";
       let html = '';
-      if (userEmail && !isAdmin) {
+      if (!userEmail || userEmail === 'гость') {
+        // Для гостей отображаем только гостевые ссылки без заголовка "Ваши ссылки"
+        html = renderItems(rows.filter(row => row.email === 'гость'), isAdmin);
+      } else if (!isAdmin) {
         const personal = rows.filter(row => row.email === userEmail);
         const guests = rows.filter(row => row.email === 'гость');
         if (personal.length > 0) {
@@ -248,6 +251,7 @@
           html += renderItems(guests, isAdmin);
         }
       } else {
+        // Для админа отображаем все ссылки
         html = renderItems(rows, isAdmin);
       }
       linksList.innerHTML = html;
@@ -311,7 +315,6 @@
       } else if (!isAdmin) {
         query = query.or(`email.eq.гость,email.eq.${email}`);
       }
-      // для админа - все
       const { data, error } = await query;
       if (error) { console.error(error); return; }
       renderList(data, isAdmin, email);
@@ -390,4 +393,4 @@
     loadLinks();
   </script>
 </body>
- </html>
+  </html>
