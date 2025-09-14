@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
@@ -71,6 +71,9 @@
       padding:8px 10px; border-radius:10px; border:1px dashed #d1d5db; background:#fff; font-size:13px; cursor:pointer;
       text-align:center;
     }
+    .actions {
+      display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap;
+    }
     .empty{padding:10px 4px; color:var(--muted)}
     .auth-link{font-weight:700; text-decoration:none}
     footer{margin-top:16px; color:var(--muted); font-size:12px}
@@ -82,8 +85,14 @@
       background: var(--card); padding: 20px; border-radius: var(--radius); max-width: 500px; width: 90%;
       box-shadow: var(--shadow);
     }
-    .modal-actions {display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end;}
+    .modal-actions {
+      display: flex; gap: 10px; margin-top: 16px; justify-content: flex-end; flex-wrap: wrap;
+    }
     .close-btn {cursor: pointer; font-size: 14px;}
+    .section-title {
+      font-size: 16px; font-weight: 600; margin: 12px 0 6px;
+    }
+    hr { border: 0; border-top: 1px solid #e5e7eb; margin: 10px 0; }
   </style>
 </head>
 <body>
@@ -92,7 +101,7 @@
       <div class="brand">vyy • сокращатель</div>
       <div class="top-actions">
         <span id="status" class="status">Статус: Гость</span>
-        <a class="pill ghost auth-link" href="/auth.html">Войти / Регистрация</a>
+        <a id="authLink" class="pill ghost auth-link" href="/auth.html">Войти / Регистрация</a>
       </div>
     </div>
 
@@ -150,6 +159,7 @@
     const ADMIN_UID = "8626c0b4-d51d-4033-91fe-84d4dffd85a0";
 
     const statusEl = document.getElementById("status");
+    const authLink = document.getElementById("authLink");
     const form = document.getElementById("shortenForm");
     const urlInput = document.getElementById("urlInput");
     const customCode = document.getElementById("customCode");
@@ -181,7 +191,7 @@
         return Object.keys(data).length > 0; // Если ответ не пустой, URL небезопасен
       } catch (e) {
         console.error("Ошибка проверки безопасности:", e);
-        return false; // В случае ошибки разрешаем ссылку (можно изменить на запрет)
+        return false; // В случае ошибки разрешаем ссылку
       }
     }
 
@@ -194,41 +204,54 @@
       return code.replace(/[^A-Za-z0-9\-_.~]/g, "").slice(0, 32);
     }
 
-    async function updateStatus() {
+    async function getUserStatus() {
       const { data: { user } } = await sb.auth.getUser();
       if (!user) {
         statusEl.textContent = "Статус: Гость";
-        return false;
+        authLink.textContent = "Войти / Регистрация";
+        authLink.href = "/auth.html";
+        authLink.onclick = null;
+        return { user: null, isAdmin: false, email: 'гость' };
       }
       const isAdmin = user.id === ADMIN_UID;
       statusEl.textContent = isAdmin ? "Статус: Админ" : "Статус: Пользователь";
-      return isAdmin;
+      authLink.textContent = "Выйти";
+      authLink.href = "#";
+      authLink.onclick = async (e) => {
+        e.preventDefault();
+        await sb.auth.signOut();
+        location.reload();
+      };
+      return { user, isAdmin, email: user.email };
     }
 
-    function renderList(rows, isAdmin) {
+    function renderList(rows, isAdmin, userEmail) {
       if (!rows || rows.length === 0) {
         linksList.innerHTML = "";
         emptyState.style.display = "block";
         return;
       }
       emptyState.style.display = "none";
-      linksList.innerHTML = rows.map(row => {
-        const shortUrl = `${window.location.origin}/${row.short}`;
-        return `
-          <div class="item">
-            <div><span class="muted">Оригинал:</span> <a class="link" href="${row.url}" target="_blank">${row.url}</a></div>
-            <div><span class="muted">Сокращённая:</span> <a class="link mono" href="${shortUrl}" target="_blank">${shortUrl}</a></div>
-            <div style="display:flex; gap:8px; margin-top:6px">
-              <button class="copy" data-copy="${shortUrl}">Копировать</button>
-              <a class="copy" href="${shortUrl}" target="_blank" style="text-decoration:none; display:inline-flex; align-items:center">Открыть</a>
-              ${isAdmin ? `
-                <button class="edit-btn" data-id="${row.id}" data-url="${row.url}" data-short="${row.short}">Редактировать</button>
-                <button class="delete-btn btn-danger" data-id="${row.id}">Удалить</button>
-              ` : ''}
-            </div>
-          </div>
-        `;
-      }).join("");
+      let html = '';
+      if (userEmail && !isAdmin) {
+        const personal = rows.filter(row => row.email === userEmail);
+        const guests = rows.filter(row => row.email === 'гость');
+        if (personal.length > 0) {
+          html += '<div class="section-title">Ваши ссылки</div>';
+          html += renderItems(personal, isAdmin);
+        }
+        if (personal.length > 0 && guests.length > 0) {
+          html += '<hr>';
+        }
+        if (guests.length > 0) {
+          html += '<div class="section-title">Ссылки гостей</div>';
+          html += renderItems(guests, isAdmin);
+        }
+      } else {
+        html = renderItems(rows, isAdmin);
+      }
+      linksList.innerHTML = html;
+
       document.querySelectorAll(".copy[data-copy]").forEach(btn => {
         btn.onclick = async () => {
           try {
@@ -259,11 +282,39 @@
       }
     }
 
+    function renderItems(rows, isAdmin) {
+      return rows.map(row => {
+        const shortUrl = `${window.location.origin}/${row.short}`;
+        return `
+          <div class="item">
+            <div><span class="muted">Оригинал:</span> <a class="link" href="${row.url}" target="_blank">${row.url}</a></div>
+            <div><span class="muted">Сокращённая:</span> <a class="link mono" href="${shortUrl}" target="_blank">${shortUrl}</a></div>
+            ${isAdmin ? `<div><span class="muted">Email:</span> ${row.email}</div>` : ''}
+            <div class="actions">
+              <button class="copy" data-copy="${shortUrl}">Копировать</button>
+              <a class="copy" href="${shortUrl}" target="_blank" style="text-decoration:none; display:inline-flex; align-items:center">Открыть</a>
+              ${isAdmin ? `
+                <button class="edit-btn" data-id="${row.id}" data-url="${row.url}" data-short="${row.short}">Редактировать</button>
+                <button class="delete-btn btn-danger" data-id="${row.id}">Удалить</button>
+              ` : ''}
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
     async function loadLinks() {
-      const { data, error } = await sb.from("q").select("*").order("id", { ascending: false });
+      const { user, isAdmin, email } = await getUserStatus();
+      let query = sb.from("q").select("*").order("id", { ascending: false });
+      if (!user) {
+        query = query.eq("email", "гость");
+      } else if (!isAdmin) {
+        query = query.or(`email.eq.гость,email.eq.${email}`);
+      }
+      // для админа - все
+      const { data, error } = await query;
       if (error) { console.error(error); return; }
-      const isAdmin = await updateStatus();
-      renderList(data, isAdmin);
+      renderList(data, isAdmin, email);
     }
 
     form.addEventListener("submit", async (e) => {
@@ -290,7 +341,8 @@
         alert("Этот код уже занят, выберите другой.");
         return;
       }
-      const { error } = await sb.from("q").insert([{ short: shortCode, url: originalUrl }]);
+      const { user, email } = await getUserStatus();
+      const { error } = await sb.from("q").insert([{ short: shortCode, url: originalUrl, email }]);
       if (error) { alert("Ошибка: " + error.message); return; }
       urlInput.value = ""; customCode.value = "";
       loadLinks();
@@ -298,7 +350,7 @@
 
     editForm.addEventListener("submit", async (e) => {
       e.preventDefault();
-      const isAdmin = await updateStatus();
+      const { isAdmin } = await getUserStatus();
       if (!isAdmin) { alert("Только администратор может редактировать ссылки"); return; }
       const id = editLinkId.value;
       const newUrl = editUrlInput.value.trim();
@@ -334,7 +386,7 @@
 
     refreshBtn.addEventListener("click", loadLinks);
 
-    updateStatus();
+    getUserStatus();
     loadLinks();
   </script>
 </body>
