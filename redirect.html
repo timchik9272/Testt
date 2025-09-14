@@ -29,7 +29,7 @@
         document.getElementById("msg").textContent = "Ссылка не найдена";
         return;
       }
-      document.getElementById("msg").textContent = data.url;
+      document.getElementById("msg").textContent = " Идёт перенаправление… сайт: " + data.url;
       // небольшая задержка для UX
       setTimeout(()=> { window.location.href = data.url; }, 0);
     }
