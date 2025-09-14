@@ -17,8 +17,8 @@
     <div class="muted" style="margin-top:6px">Если не произошло — проверьте код ссылки.</div>
   </div>
   <script>
-    const SUPABASE_URL = "https://jkjahrrewfrcnfojpetn.supabase.co";
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpramFocnJld2ZyY25mb2pwZXRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTUxODE3MDEsImV4cCI6MjA3MDc1NzcwMX0.fisOkohi_LFNOj0j0iMMrZey8O_bPnQwhPcWhhTRqWY";
+    const SUPABASE_URL = "https://nsscaoqarmfslfdtwvma.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_7kiQMNJIhzz-R9szKkriwg_V-KlgbUm";
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     async function redirect() {
@@ -30,7 +30,7 @@
         return;
       }
       // небольшая задержка для UX
-      setTimeout(()=> { window.location.href = data.url; }, 100);
+      setTimeout(()=> { window.location.href = data.url; }, 0);
     }
     redirect();
   </script>
