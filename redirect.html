@@ -14,7 +14,7 @@
 <body>
   <div class="card">
     <div id="msg">Идёт перенаправление…</div>
-    <div class="muted" style="margin-top:6px">Если не произошло — проверьте код ссылки.</div>
+    <div class="muted" style="margin-top:6px">Если не загружается — проверьте код ссылки. В случае если код указан верно, возможно сайт не доступен в России и поэтому не загружается. </div>
   </div>
   <script>
     const SUPABASE_URL = "https://nsscaoqarmfslfdtwvma.supabase.co";
@@ -29,8 +29,9 @@
         document.getElementById("msg").textContent = "Ссылка не найдена";
         return;
       }
+      document.getElementById("msg").textContent = data.url;
       // небольшая задержка для UX
-      setTimeout(()=> { window.location.href = data.url; }, 100);
+      setTimeout(()=> { window.location.href = data.url; }, 0);
     }
     redirect();
   </script>
