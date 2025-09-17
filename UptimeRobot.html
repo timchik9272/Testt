@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supabase Keep Alive</title>
+</head>
+<body>
+    <div id="response">Waiting for response...</div>
+    <script>
+        const SUPABASE_URL = "https://nsscaoqarmfslfdtwvma.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_7kiQMNJIhzz-R9szKkriwg_V-KlgbUm";
+
+        async function keepAlive() {
+            try {
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${SUPABASE_KEY}`,
+                        'apikey': SUPABASE_KEY
+                    }
+                });
+                const responseDiv = document.getElementById('response');
+                responseDiv.textContent = `Response: ${response.status} ${response.statusText}`;
+            } catch (error) {
+                const responseDiv = document.getElementById('response');
+                responseDiv.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        // Выполнить запрос при загрузке страницы
+        window.onload = keepAlive;
+    </script>
+</body>
+</html>
