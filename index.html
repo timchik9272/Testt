@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
@@ -67,7 +67,7 @@
     .ghost{
       background:#fff; color:#111827; border:1px solid #e5e7eb;
     }
-    .copy, .edit, .delete, .clear-btn, .sort-btn{
+    .copy, .edit, .delete{
       padding:8px 10px; border-radius:10px; border:1px dashed #d1d5db; background:#fff; font-size:13px; cursor:pointer;
     }
     .empty{padding:10px 4px; color:var(--muted)}
@@ -84,9 +84,6 @@
     .close-btn{
       float:right; cursor:pointer; font-size:20px; color:var(--muted);
     }
-    .search-row{display:flex; gap:8px; margin-bottom:12px}
-    .search-input{flex:1}
-    .clear-btn{width:auto; min-width:40px; text-align:center}
   </style>
 </head>
 <body>
@@ -121,11 +118,7 @@
         <h3 style="margin:0; font-size:18px">Все ссылки</h3>
         <button id="refreshBtn" class="copy">Обновить</button>
       </div>
-      <div class="search-row">
-        <input type="text" id="searchInput" class="search-input" placeholder="Поиск по URL или коду..." />
-        <button id="clearSearch" class="clear-btn">✕</button>
-      </div>
-      <button id="sortBtn" class="sort-btn" style="margin-bottom:12px">Сортировка: По новизне ↓</button>
+      <input type="text" id="searchInput" placeholder="Поиск по URL или коду..." style="margin-bottom:12px" />
       <div id="linksList" class="list"></div>
       <div id="emptyState" class="empty" style="display:none">Пока пусто. Добавьте первую ссылку ↑</div>
     </div>
@@ -152,8 +145,8 @@
   </div>
 
   <script>
-    const SUPABASE_URL = https://nsscaoqarmfslfdtwvma.supabase.co;
-    const SUPABASE_KEY = sb_publishable_7kiQMNJIhzz-R9szKkriwg_V-KlgbUm;
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_KEY = process.env.SUPABASE_API;
     const SAFE_BROWSING_API_KEY = "AIzaSyA80adMNSwH9iJDFKpeXcgpbLF0PgPas3M";
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     const ADMIN_UID = "8626c0b4-d51d-4033-91fe-84d4dffd85a0";
@@ -166,8 +159,6 @@
     const emptyState = document.getElementById("emptyState");
     const refreshBtn = document.getElementById("refreshBtn");
     const searchInput = document.getElementById("searchInput");
-    const clearSearch = document.getElementById("clearSearch");
-    const sortBtn = document.getElementById("sortBtn");
     const editModal = document.getElementById("editModal");
     const editForm = document.getElementById("editForm");
     const editUrlInput = document.getElementById("editUrlInput");
@@ -176,14 +167,6 @@
 
     let allLinks = [];
     let isAdmin = false;
-    let currentSort = 'newest'; // 'newest', 'oldest', 'az', 'za'
-
-    const sortLabels = {
-      'newest': 'По новизне ↓',
-      'oldest': 'По старине ↑',
-      'az': 'A-Z ↑',
-      'za': 'Z-A ↓'
-    };
 
     function generateShortCode(length = 4) {
       const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -240,29 +223,6 @@
       isAdmin = user.id === ADMIN_UID;
       statusEl.textContent = isAdmin ? "Статус: Админ" : "Статус: Пользователь";
       return isAdmin;
-    }
-
-    function sortLinks(links) {
-      let sorted = [...links];
-      if (currentSort === 'newest') {
-        sorted.sort((a, b) => b.id - a.id);
-      } else if (currentSort === 'oldest') {
-        sorted.sort((a, b) => a.id - b.id);
-      } else if (currentSort === 'az') {
-        sorted.sort((a, b) => a.short.localeCompare(b.short));
-      } else if (currentSort === 'za') {
-        sorted.sort((a, b) => b.short.localeCompare(a.short));
-      }
-      return sorted;
-    }
-
-    function applyFiltersAndRender() {
-      const query = searchInput.value.toLowerCase().trim();
-      let filtered = allLinks.filter(row => 
-        row.url.toLowerCase().includes(query) || row.short.toLowerCase().includes(query)
-      );
-      filtered = sortLinks(filtered);
-      renderList(filtered);
     }
 
     function renderList(rows) {
@@ -327,32 +287,25 @@
     }
 
     async function loadLinks() {
-      const { data, error } = await sb.from("q").select("*");
+      const { data, error } = await sb.from("q").select("*").order("id", { ascending: false });
       if (error) {
         console.error(error);
         return;
       }
       await updateStatus();
       allLinks = data;
-      sortBtn.textContent = `Сортировка: ${sortLabels[currentSort]}`;
-      applyFiltersAndRender();
+      renderList(allLinks);
+      searchInput.value = ""; // Сброс поиска
     }
 
     refreshBtn.addEventListener("click", loadLinks);
 
-    searchInput.addEventListener("input", applyFiltersAndRender);
-
-    clearSearch.addEventListener("click", () => {
-      searchInput.value = "";
-      applyFiltersAndRender();
-    });
-
-    sortBtn.addEventListener("click", () => {
-      const sortModes = ['newest', 'oldest', 'az', 'za'];
-      const currentIndex = sortModes.indexOf(currentSort);
-      currentSort = sortModes[(currentIndex + 1) % sortModes.length];
-      sortBtn.textContent = `Сортировка: ${sortLabels[currentSort]}`;
-      applyFiltersAndRender();
+    searchInput.addEventListener("input", (e) => {
+      const query = e.target.value.toLowerCase().trim();
+      const filtered = allLinks.filter(row => 
+        row.url.toLowerCase().includes(query) || row.short.toLowerCase().includes(query)
+      );
+      renderList(filtered);
     });
 
     form.addEventListener("submit", async (e) => {
@@ -483,4 +436,4 @@
     loadLinks();
   </script>
 </body>
-</html>
+  </html>
