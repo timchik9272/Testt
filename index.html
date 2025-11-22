@@ -87,10 +87,23 @@
     .item-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .link-text {
       font-size: 15px; color: var(--primary-dark); text-decoration: none; font-weight: 500;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; display: block;
+      /* Убрано max-width для полного отображения ссылок */
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block;
+      flex-grow: 1; /* Позволяет занимать больше места */
     }
     .original-link {
-      font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px;
+      font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; 
+      /* Убрано max-width для полного отображения ссылок */
+    }
+    
+    /* Стиль для бейджа владельца (email/anonim) */
+    .owner-badge {
+      font-size: 10px; font-weight: 600; padding: 3px 8px; border-radius: 6px; 
+      color: #4f46e5; background: #eef2ff; flex-shrink: 0;
+      white-space: nowrap; max-width: 150px; overflow: hidden; text-overflow: ellipsis;
+    }
+    .owner-badge.anonim {
+      color: #ca8a04; background: #fefce8;
     }
 
     .actions-bar {
@@ -160,10 +173,16 @@
     <div id="listContainer">
       <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; padding: 0 4px;">
         <h3 id="listTitle" style="margin:0; font-size:18px; font-weight:700"></h3>
-        <button id="refreshBtn" class="action-btn">↻</button>
+        <button id="refreshBtn" class="action-btn" title="Обновить список">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M11.534 7h3.963c.538 0 .75.385.589.843l-1.4 3.921c-.417 1.16-.983 1.777-2.071 1.777H1.365C.647 13.541 0 12.924 0 12.015V7.476c0-.853.647-1.472 1.365-1.472h1.611l.244-.799c.652-2.128 2.015-3.376 4.143-3.376H8.53v.975c0 .324.262.586.586.586h1.232c.324 0 .586-.262.586-.586V1.76H7.365c-2.348 0-3.95 1.549-4.707 3.992l-.244.799H1.365C.612 6.551 0 7.168 0 8.083v3.932c0 .909.612 1.526 1.365 1.526h11.458c.753 0 1.365-.617 1.365-1.526V8.083c0-.909-.612-1.526-1.365-1.526H11.534zM11.534 7v6.009H14.15c.196 0 .339-.148.271-.341l-1.4-3.921c-.13-.362-.338-.567-.61-.567H11.534zM6.914 11.516a.586.586 0 00-.586.586c0 .324.262.586.586.586h.586a.586.586 0 00.586-.586.586.586 0 00-.586-.586H6.914z"/>
+            <path d="M12.946 7h.586a.586.586 0 00.586-.586V5.845a.586.586 0 00-.586-.586h-.586a.586.586 0 00-.586.586v.569a.586.586 0 00.586.586z"/>
+            <path d="M12.946 12.015h.586a.586.586 0 00.586-.586v-.569a.586.586 0 00-.586-.586h-.586a.586.586 0 00-.586.586v.569a.586.586 0 00.586.586z"/>
+          </svg>
+        </button>
       </div>
       
-      <input type="text" id="searchInput" placeholder="Поиск..." style="width:100%; margin-bottom:16px; padding:10px; border-radius:10px; border:1px solid #e5e7eb; font-size:14px;" />
+      <input type="text" id="searchInput" placeholder="Поиск по URL, коду или email..." style="width:100%; margin-bottom:16px; padding:10px; border-radius:10px; border:1px solid #e5e7eb; font-size:14px;" />
       
       <div id="linksList" class="list"></div>
     </div>
@@ -217,6 +236,7 @@
     let currentUser = null;
     let isAdmin = false;
     let allLinks = [];
+    let userEmailDisplay = "Гость"; // Для отображения email в интерфейсе
 
     // --- UTILS ---
     function generateShortCode(length = 4) {
@@ -231,12 +251,12 @@
       isAdmin = user?.id === ADMIN_UID;
 
       if (user) {
-        // User Logged In
+        userEmailDisplay = user.email;
         els.userEmail.textContent = user.email.split('@')[0];
         els.loginBtn.style.display = "none";
         els.logoutBtn.style.display = "inline-block";
       } else {
-        // Guest
+        userEmailDisplay = "anonim";
         els.userEmail.textContent = "Гость";
         els.loginBtn.style.display = "inline-block";
         els.logoutBtn.style.display = "none";
@@ -259,15 +279,14 @@
         filterValue = currentUser.id;
         els.listTitle.textContent = isAdmin ? "Все ссылки (Админ)" : "Мои ссылки";
       } else {
-        // Фильтруем по нулевому UUID для гостей
         filterValue = ANON_UUID;
         els.listTitle.textContent = "Ваши ссылки (Гость)";
       }
       
-      // Поиск доступен только для авторизованных пользователей
-      els.searchInput.style.display = currentUser ? "block" : "none"; 
+      els.searchInput.value = ''; // Сброс поиска при перезагрузке
       
-      let query = sb.from("q").select("*").order("id", { ascending: false });
+      // Использование нового имени столбца: email
+      let query = sb.from("q").select("id, url, short, user_id, email").order("id", { ascending: false });
       
       if (!isAdmin) {
         // Фильтруем по user_id (UUID или ANON_UUID)
@@ -277,12 +296,24 @@
       const { data, error } = await query;
       if (error) {
         console.error("Error loading links:", error);
-        alert("Ошибка загрузки ссылок из базы данных.");
+        alert("Ошибка загрузки ссылок из базы данных: " + error.message);
         return;
       }
 
       allLinks = data || [];
       renderList(allLinks);
+    }
+    
+    // --- Поиск для всех ---
+    function filterAndRenderList(query) {
+      const q = query.toLowerCase();
+      const filtered = allLinks.filter(x => 
+        x.url.toLowerCase().includes(q) || 
+        x.short.toLowerCase().includes(q) ||
+        // Поиск по email/anonim доступен
+        x.email.toLowerCase().includes(q)
+      );
+      renderList(filtered);
     }
 
     function renderList(items) {
@@ -299,19 +330,21 @@
       els.linksList.innerHTML = items.map(item => {
         const shortUrl = `${window.location.origin}/${item.short}`;
         
-        let badges = '';
+        let ownerBadgeHtml = '';
         const isAnonimLink = item.user_id === ANON_UUID; 
-
-        if (isAdmin) {
-          if (item.user_id && item.user_id !== currentUser?.id && !isAnonimLink) {
-             // Значок "Чужая" для ссылок других авторизованных пользователей (Admin view)
-            badges += `<span style="font-size:10px; background:#eef2ff; padding:2px 6px; border-radius:4px; color:#4f46e5">Чужая</span>`;
-          } else if (isAnonimLink) {
-            // Значок "Гость" для anonim ссылок (Admin view)
-            badges += `<span style="font-size:10px; background:#fefce8; padding:2px 6px; border-radius:4px; color:#ca8a04">Гость (UUID)</span>`;
-          }
-        }
         
+        // --- Логика отображения Email/anonim для админов ---
+        if (isAdmin) {
+            // Используем item.email
+            const ownerText = item.email || (isAnonimLink ? "anonim" : "Неизвестно");
+            const badgeClass = isAnonimLink ? 'anonim' : '';
+            ownerBadgeHtml = `<span class="owner-badge ${badgeClass}" title="Владелец: ${ownerText}">${ownerText}</span>`;
+        } else if (isAnonimLink) {
+             // Для обычного гостя, который видит свою ссылку (ANON_UUID)
+             ownerBadgeHtml = `<span class="owner-badge anonim">anonim</span>`;
+        }
+        // Для обычного пользователя, который видит свою ссылку, бейдж не нужен.
+
         const actions = showDbActions ? `
           <button class="action-btn" onclick="openEdit('${item.id}', '${item.url}', '${item.short}')">Изменить</button>
           <button class="action-btn" style="color:#ef4444; border-color:#fecaca" onclick="deleteLink('${item.id}')">Удалить</button>
@@ -325,7 +358,7 @@
           <div class="item">
             <div class="item-row">
               <div class="link-text" style="font-size:18px; font-family:monospace">${window.location.host}/${item.short}</div>
-              ${badges}
+              ${ownerBadgeHtml}
             </div>
             <div class="original-link">${item.url}</div>
             
@@ -346,7 +379,7 @@
       if (confirm("Точно удалить из базы данных?")) {
         const { error } = await sb.from("q").delete().eq("id", id);
         if (!error) loadLinks();
-        else alert("Ошибка: " + error.message);
+        else alert("Ошибка удаления: " + error.message);
       }
     };
 
@@ -382,7 +415,7 @@
         code = generateShortCode(4);
       }
 
-      // Проверка уникальности в Supabase (ВАЖНО: нужна для всех)
+      // Проверка уникальности в Supabase 
       const { data: exists } = await sb.from("q").select("id").eq("short", code).limit(1);
       if (exists && exists.length > 0) {
         alert("Код " + code + " уже занят в общей базе данных. Выберите другой.");
@@ -391,12 +424,14 @@
 
       const shortUrl = `${window.location.origin}/${code}`;
 
-      // 3. Единая логика сохранения в Supabase
+      // Единая логика сохранения в Supabase
       const payload = { 
         url: url, 
         short: code,
-        // Если авторизован, используем user_id. Иначе - ANON_UUID
+        // Сохраняем user_id (UUID или ANON_UUID)
         user_id: currentUser ? currentUser.id : ANON_UUID, 
+        // Сохраняем email (email пользователя или "anonim")
+        email: currentUser ? currentUser.email : "anonim" // <--- ИЗМЕНЕНО НА 'email'
       };
 
       const { error } = await sb.from("q").insert([payload]);
@@ -406,7 +441,6 @@
       } else {
         els.urlInput.value = "";
         els.customCode.value = "";
-        alert(`Ссылка создана: ${shortUrl}`);
         loadLinks();
       }
     });
@@ -420,7 +454,7 @@
       const code = document.getElementById("editShortCode").value.trim();
 
       const { error } = await sb.from("q").update({ url, short: code }).eq("id", id);
-      if (error) alert(error.message);
+      if (error) alert("Ошибка сохранения: " + error.message);
       else {
         els.editModal.style.display = "none";
         loadLinks();
@@ -429,11 +463,9 @@
 
     // UI Utilities
     els.refreshBtn.onclick = loadLinks;
+    // --- Поиск при вводе ---
     els.searchInput.oninput = (e) => {
-      // Поиск работает только для авторизованных пользователей
-      if (!currentUser) return;
-      const q = e.target.value.toLowerCase();
-      renderList(allLinks.filter(x => x.url.toLowerCase().includes(q) || x.short.toLowerCase().includes(q)));
+      filterAndRenderList(e.target.value);
     };
     document.querySelector(".close-modal").onclick = () => els.editModal.style.display = "none";
     els.editModal.onclick = (e) => { if(e.target === els.editModal) els.editModal.style.display = "none"; }
