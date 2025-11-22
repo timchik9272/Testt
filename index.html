@@ -39,7 +39,7 @@
 
     .status{
       font-size:13px; font-weight:600; color:var(--muted);
-      margin-right: auto; /* Push buttons to right on mobile */
+      margin-right: auto;
     }
     
     /* Buttons */
@@ -157,19 +157,15 @@
       </form>
     </div>
 
-    <div id="listContainer" style="display:none"> <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; padding: 0 4px;">
-        <h3 style="margin:0; font-size:18px; font-weight:700">Мои ссылки</h3>
+    <div id="listContainer">
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; padding: 0 4px;">
+        <h3 id="listTitle" style="margin:0; font-size:18px; font-weight:700"></h3>
         <button id="refreshBtn" class="action-btn">↻</button>
       </div>
       
       <input type="text" id="searchInput" placeholder="Поиск..." style="width:100%; margin-bottom:16px; padding:10px; border-radius:10px; border:1px solid #e5e7eb; font-size:14px;" />
       
       <div id="linksList" class="list"></div>
-    </div>
-
-    <div id="guestState" class="empty-state" style="display:none">
-      <p style="margin:0 0 10px 0; font-size:16px; font-weight:600; color:#374151">Войдите, чтобы видеть историю</p>
-      <p style="margin:0; font-size:14px">Ссылки создаются, но список доступен только автору.</p>
     </div>
 
     <div id="editModal" class="modal" style="display:none">
@@ -199,6 +195,9 @@
     
     // ID Админа (видит всё)
     const ADMIN_UID = "8626c0b4-d51d-4033-91fe-84d4dffd85a0";
+    
+    // Ключ для локального хранилища
+    const LOCAL_STORAGE_KEY = "guest_links";
 
     // Элементы
     const els = {
@@ -206,7 +205,7 @@
       logoutBtn: document.getElementById("logoutBtn"),
       userEmail: document.getElementById("userEmail"),
       listContainer: document.getElementById("listContainer"),
-      guestState: document.getElementById("guestState"),
+      listTitle: document.getElementById("listTitle"),
       linksList: document.getElementById("linksList"),
       form: document.getElementById("shortenForm"),
       urlInput: document.getElementById("urlInput"),
@@ -220,6 +219,30 @@
     let isAdmin = false;
     let allLinks = [];
 
+    // --- UTILS ---
+    function generateShortCode(length = 4) {
+      const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+      return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    }
+
+    function getLocalLinks() {
+      try {
+        const links = localStorage.getItem(LOCAL_STORAGE_KEY);
+        return links ? JSON.parse(links) : [];
+      } catch (e) {
+        console.error("Error loading local storage:", e);
+        return [];
+      }
+    }
+
+    function saveLocalLinks(links) {
+      try {
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(links));
+      } catch (e) {
+        console.error("Error saving to local storage:", e);
+      }
+    }
+
     // --- AUTH & STATE ---
     async function initApp() {
       const { data: { user } } = await sb.auth.getUser();
@@ -228,20 +251,17 @@
 
       if (user) {
         // User Logged In
-        els.userEmail.textContent = user.email.split('@')[0]; // Показываем только часть до @
+        els.userEmail.textContent = user.email.split('@')[0];
         els.loginBtn.style.display = "none";
         els.logoutBtn.style.display = "inline-block";
-        els.listContainer.style.display = "block";
-        els.guestState.style.display = "none";
-        loadLinks();
       } else {
         // Guest
         els.userEmail.textContent = "Гость";
         els.loginBtn.style.display = "inline-block";
         els.logoutBtn.style.display = "none";
-        els.listContainer.style.display = "none";
-        els.guestState.style.display = "block";
       }
+
+      loadLinks();
     }
 
     els.logoutBtn.onclick = async () => {
@@ -251,38 +271,57 @@
 
     // --- DATA LOADING ---
     async function loadLinks() {
-      if (!currentUser) return;
+      if (currentUser) {
+        // Загрузка из Supabase
+        els.listTitle.textContent = isAdmin ? "Все ссылки (Админ)" : "Мои ссылки";
+        els.searchInput.style.display = "block"; // Поиск доступен
+        
+        let query = sb.from("q").select("*").order("id", { ascending: false });
+        if (!isAdmin) {
+          query = query.eq("user_id", currentUser.id);
+        }
 
-      let query = sb.from("q").select("*").order("id", { ascending: false });
+        const { data, error } = await query;
+        if (error) {
+          console.error("Error loading links:", error);
+          alert("Ошибка загрузки ссылок из базы данных.");
+          return;
+        }
 
-      // ФИЛЬТРАЦИЯ: Если не админ, загружаем только СВОИ ссылки
-      if (!isAdmin) {
-        query = query.eq("user_id", currentUser.id);
+        allLinks = data || [];
+
+      } else {
+        // Загрузка из LocalStorage (Гость)
+        els.listTitle.textContent = "Локальные ссылки (Гость)";
+        els.searchInput.style.display = "none"; // Скрываем поиск для гостей
+        allLinks = getLocalLinks();
+        // ВАЖНО: Модальные окна и действия редактирования/удаления недоступны для локальных ссылок
       }
 
-      const { data, error } = await query;
-      
-      if (error) {
-        console.error("Error loading links:", error);
-        // Если ошибка "column user_id does not exist", значит вы не добавили колонку в Supabase
-        if(error.message.includes("user_id")) alert("Системная ошибка: В базе данных нет колонки user_id. Обратитесь к администратору.");
-        return;
-      }
-
-      allLinks = data || [];
       renderList(allLinks);
     }
 
     function renderList(items) {
+      // Кнопки редактирования и удаления доступны только для авторизованных пользователей
+      const showDbActions = !!currentUser; 
+
       if (items.length === 0) {
-        els.linksList.innerHTML = `<div style="text-align:center; padding:20px; color:#9ca3af">У вас пока нет ссылок</div>`;
+        const message = currentUser 
+          ? "У вас пока нет ссылок в базе данных." 
+          : "У вас пока нет локальных ссылок. Они будут видны, пока вы не очистите кэш.";
+          
+        els.linksList.innerHTML = `<div style="text-align:center; padding:20px; color:#9ca3af">${message}</div>`;
         return;
       }
 
       els.linksList.innerHTML = items.map(item => {
         const shortUrl = `${window.location.origin}/${item.short}`;
-        // Для админа добавим пометку, если ссылка чужая
-        const ownerBadge = (isAdmin && item.user_id !== currentUser.id) ? `<span style="font-size:10px; background:#eef2ff; padding:2px 6px; border-radius:4px; color:#4f46e5">Чужая</span>` : '';
+        const ownerBadge = (isAdmin && item.user_id && item.user_id !== currentUser.id) ? `<span style="font-size:10px; background:#eef2ff; padding:2px 6px; border-radius:4px; color:#4f46e5">Чужая</span>` : '';
+        
+        const actions = showDbActions ? `
+          <button class="action-btn" onclick="openEdit('${item.id}', '${item.url}', '${item.short}')">Изменить</button>
+          <button class="action-btn" style="color:#ef4444; border-color:#fecaca" onclick="deleteLink('${item.id}')">Удалить</button>
+        ` : '';
 
         return `
           <div class="item">
@@ -295,16 +334,36 @@
             <div class="actions-bar">
               <button class="action-btn" onclick="copyToClip('${shortUrl}', this)">Копировать</button>
               <a href="${shortUrl}" target="_blank" class="action-btn" style="text-decoration:none">Открыть</a>
-              <button class="action-btn" onclick="openEdit('${item.id}', '${item.url}', '${item.short}')">Изменить</button>
-              <button class="action-btn" style="color:#ef4444; border-color:#fecaca" onclick="deleteLink('${item.id}')">Удалить</button>
+              ${actions}
             </div>
           </div>
         `;
       }).join("");
     }
 
-    // --- ACTIONS ---
+    // --- ACTIONS (для Supabase) ---
+    
+    // Эти действия применимы только к ссылкам в базе данных
+    window.deleteLink = async (id) => {
+      if (!currentUser) return; // Защита от случайного вызова для гостя
+      if (confirm("Точно удалить из базы данных?")) {
+        const { error } = await sb.from("q").delete().eq("id", id);
+        if (!error) loadLinks();
+        else alert("Ошибка: " + error.message);
+      }
+    };
+
+    window.openEdit = (id, url, short) => {
+      if (!currentUser) return; // Защита от случайного вызова для гостя
+      document.getElementById("editLinkId").value = id;
+      document.getElementById("editUrlInput").value = url;
+      document.getElementById("editShortCode").value = short;
+      els.editModal.style.display = "flex";
+    };
+
+    // Общие утилиты
     window.copyToClip = async (text, btn) => {
+      //... (функция копирования остается без изменений)
       try {
         await navigator.clipboard.writeText(text);
         const originalText = btn.innerText;
@@ -317,63 +376,66 @@
       } catch (e) { alert("Ошибка копирования"); }
     };
 
-    window.deleteLink = async (id) => {
-      if (confirm("Точно удалить?")) {
-        const { error } = await sb.from("q").delete().eq("id", id);
-        if (!error) loadLinks();
-        else alert("Ошибка: " + error.message);
-      }
-    };
-
-    window.openEdit = (id, url, short) => {
-      document.getElementById("editLinkId").value = id;
-      document.getElementById("editUrlInput").value = url;
-      document.getElementById("editShortCode").value = short;
-      els.editModal.style.display = "flex";
-    };
-
     // --- FORM SUBMIT ---
     els.form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const url = els.urlInput.value.trim();
       
-      // Генерация или очистка кода
       let code = els.customCode.value.trim().replace(/[^A-Za-z0-9\-_.~]/g, "");
       if (!code) {
-        const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-        code = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+        code = generateShortCode(4);
       }
 
-      // Проверка уникальности
+      // Проверка уникальности в Supabase (ВАЖНО: нужна для всех, даже для гостей, чтобы не создавать дубликатов)
       const { data: exists } = await sb.from("q").select("id").eq("short", code).limit(1);
       if (exists && exists.length > 0) {
-        alert("Код " + code + " уже занят.");
+        alert("Код " + code + " уже занят в общей базе данных. Выберите другой.");
         return;
       }
 
-      // Подготовка данных
-      const payload = { 
-        url: url, 
-        short: code,
-        // ВАЖНО: Если пользователь вошел, добавляем его ID
-        user_id: currentUser ? currentUser.id : null 
-      };
+      const shortUrl = `${window.location.origin}/${code}`;
 
-      const { error } = await sb.from("q").insert([payload]);
-      
-      if (error) {
-        alert("Ошибка: " + error.message);
+      if (currentUser) {
+        // --- СОХРАНЕНИЕ В SUPABASE (Пользователь/Админ) ---
+        const payload = { 
+          url: url, 
+          short: code,
+          user_id: currentUser.id 
+        };
+
+        const { error } = await sb.from("q").insert([payload]);
+        
+        if (error) {
+          alert("Ошибка сохранения в Supabase: " + error.message);
+        } else {
+          els.urlInput.value = "";
+          els.customCode.value = "";
+          loadLinks();
+        }
       } else {
+        // --- ЛОКАЛЬНОЕ СОХРАНЕНИЕ (Гость) ---
+        const newLink = { 
+          id: Date.now(), // Используем метку времени как уникальный ID для локального списка
+          url: url, 
+          short: code 
+        };
+        
+        const localLinks = getLocalLinks();
+        // Добавляем новую ссылку в начало списка
+        localLinks.unshift(newLink); 
+        saveLocalLinks(localLinks);
+        
         els.urlInput.value = "";
         els.customCode.value = "";
-        if (currentUser) loadLinks();
-        else alert("Ссылка создана: " + window.location.origin + "/" + code + "\n(Войдите, чтобы видеть её в списке)");
+        alert(`Ссылка создана локально: ${shortUrl}`);
+        loadLinks();
       }
     });
 
-    // Edit Form Logic
+    // Edit Form Logic (только для Supabase)
     document.getElementById("editForm").onsubmit = async (e) => {
       e.preventDefault();
+      if (!currentUser) return;
       const id = document.getElementById("editLinkId").value;
       const url = document.getElementById("editUrlInput").value.trim();
       const code = document.getElementById("editShortCode").value.trim();
@@ -389,6 +451,7 @@
     // UI Utilities
     els.refreshBtn.onclick = loadLinks;
     els.searchInput.oninput = (e) => {
+      // Поиск работает только для Supabase (поскольку searchInput скрыт для гостей)
       const q = e.target.value.toLowerCase();
       renderList(allLinks.filter(x => x.url.toLowerCase().includes(q) || x.short.toLowerCase().includes(q)));
     };
