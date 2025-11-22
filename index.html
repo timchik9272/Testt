@@ -195,10 +195,9 @@
     
     // ID Админа (видит всё)
     const ADMIN_UID = "8626c0b4-d51d-4033-91fe-84d4dffd85a0";
+    // Плейсхолдер UUID для гостевых ссылок
+    const ANON_UUID = "00000000-0000-0000-0000-000000000000";
     
-    // Ключ для уникальной сессии гостя
-    const GUEST_SESSION_KEY = "vyy_guest_session_id";
-
     // Элементы
     const els = {
       loginBtn: document.getElementById("loginBtn"),
@@ -218,7 +217,6 @@
     let currentUser = null;
     let isAdmin = false;
     let allLinks = [];
-    let guestSessionId = null;
 
     // --- UTILS ---
     function generateShortCode(length = 4) {
@@ -231,15 +229,6 @@
       const { data: { user } } = await sb.auth.getUser();
       currentUser = user;
       isAdmin = user?.id === ADMIN_UID;
-      
-      // 1. Установка или получение ID гостевой сессии
-      let storedGuestId = localStorage.getItem(GUEST_SESSION_KEY);
-      if (!storedGuestId) {
-        // Генерируем уникальный ID для этой сессии/браузера
-        storedGuestId = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-        localStorage.setItem(GUEST_SESSION_KEY, storedGuestId);
-      }
-      guestSessionId = storedGuestId;
 
       if (user) {
         // User Logged In
@@ -263,17 +252,15 @@
 
     // --- DATA LOADING ---
     async function loadLinks() {
-      // Ключ и значение для фильтрации данных
-      let filterKey;
+      let filterKey = "user_id";
       let filterValue;
       
       if (currentUser) {
-        filterKey = "user_id";
         filterValue = currentUser.id;
         els.listTitle.textContent = isAdmin ? "Все ссылки (Админ)" : "Мои ссылки";
       } else {
-        filterKey = "guest_session_id";
-        filterValue = guestSessionId;
+        // Фильтруем по нулевому UUID для гостей
+        filterValue = ANON_UUID;
         els.listTitle.textContent = "Ваши ссылки (Гость)";
       }
       
@@ -283,6 +270,7 @@
       let query = sb.from("q").select("*").order("id", { ascending: false });
       
       if (!isAdmin) {
+        // Фильтруем по user_id (UUID или ANON_UUID)
         query = query.eq(filterKey, filterValue);
       }
 
@@ -302,7 +290,7 @@
       const showDbActions = !!currentUser; 
 
       if (items.length === 0) {
-        const message = "У вас пока нет ссылок.";
+        const message = "У вас пока нет ссылок в базе данных.";
           
         els.linksList.innerHTML = `<div style="text-align:center; padding:20px; color:#9ca3af">${message}</div>`;
         return;
@@ -312,18 +300,26 @@
         const shortUrl = `${window.location.origin}/${item.short}`;
         
         let badges = '';
-        if (isAdmin && item.user_id && item.user_id !== currentUser.id) {
-          // Значок "Чужая" для админа, если это ссылка другого пользователя
-          badges += `<span style="font-size:10px; background:#eef2ff; padding:2px 6px; border-radius:4px; color:#4f46e5">Чужая</span>`;
-        } else if (isAdmin && item.guest_session_id) {
-          // Значок "Гость" для админа, если это гостевая ссылка
-          badges += `<span style="font-size:10px; background:#fefce8; padding:2px 6px; border-radius:4px; color:#ca8a04">Гость</span>`;
-        }
+        const isAnonimLink = item.user_id === ANON_UUID; 
 
+        if (isAdmin) {
+          if (item.user_id && item.user_id !== currentUser?.id && !isAnonimLink) {
+             // Значок "Чужая" для ссылок других авторизованных пользователей (Admin view)
+            badges += `<span style="font-size:10px; background:#eef2ff; padding:2px 6px; border-radius:4px; color:#4f46e5">Чужая</span>`;
+          } else if (isAnonimLink) {
+            // Значок "Гость" для anonim ссылок (Admin view)
+            badges += `<span style="font-size:10px; background:#fefce8; padding:2px 6px; border-radius:4px; color:#ca8a04">Гость (UUID)</span>`;
+          }
+        }
+        
         const actions = showDbActions ? `
           <button class="action-btn" onclick="openEdit('${item.id}', '${item.url}', '${item.short}')">Изменить</button>
           <button class="action-btn" style="color:#ef4444; border-color:#fecaca" onclick="deleteLink('${item.id}')">Удалить</button>
         ` : '';
+        
+        // Гости, привязанные к ANON_UUID, не могут видеть действия редактирования/удаления
+        const finalActions = isAnonimLink && !currentUser ? '' : actions;
+
 
         return `
           <div class="item">
@@ -336,7 +332,7 @@
             <div class="actions-bar">
               <button class="action-btn" onclick="copyToClip('${shortUrl}', this)">Копировать</button>
               <a href="${shortUrl}" target="_blank" class="action-btn" style="text-decoration:none">Открыть</a>
-              ${actions}
+              ${finalActions}
             </div>
           </div>
         `;
@@ -345,9 +341,8 @@
 
     // --- ACTIONS (для Supabase) ---
     
-    // Эти действия применимы только к ссылкам в базе данных для авторизованных пользователей
     window.deleteLink = async (id) => {
-      if (!currentUser) return; // Защита от вызова для гостя
+      if (!currentUser) return;
       if (confirm("Точно удалить из базы данных?")) {
         const { error } = await sb.from("q").delete().eq("id", id);
         if (!error) loadLinks();
@@ -356,7 +351,7 @@
     };
 
     window.openEdit = (id, url, short) => {
-      if (!currentUser) return; // Защита от вызова для гостя
+      if (!currentUser) return;
       document.getElementById("editLinkId").value = id;
       document.getElementById("editUrlInput").value = url;
       document.getElementById("editShortCode").value = short;
@@ -387,7 +382,7 @@
         code = generateShortCode(4);
       }
 
-      // 2. Проверка уникальности в Supabase
+      // Проверка уникальности в Supabase (ВАЖНО: нужна для всех)
       const { data: exists } = await sb.from("q").select("id").eq("short", code).limit(1);
       if (exists && exists.length > 0) {
         alert("Код " + code + " уже занят в общей базе данных. Выберите другой.");
@@ -400,10 +395,8 @@
       const payload = { 
         url: url, 
         short: code,
-        // Если авторизован, используем user_id. Иначе - null
-        user_id: currentUser ? currentUser.id : null, 
-        // Если гость, используем guestSessionId. Иначе - null
-        guest_session_id: currentUser ? null : guestSessionId
+        // Если авторизован, используем user_id. Иначе - ANON_UUID
+        user_id: currentUser ? currentUser.id : ANON_UUID, 
       };
 
       const { error } = await sb.from("q").insert([payload]);
@@ -437,7 +430,7 @@
     // UI Utilities
     els.refreshBtn.onclick = loadLinks;
     els.searchInput.oninput = (e) => {
-      // Поиск работает только для авторизованных пользователей (для гостей searchInput скрыт)
+      // Поиск работает только для авторизованных пользователей
       if (!currentUser) return;
       const q = e.target.value.toLowerCase();
       renderList(allLinks.filter(x => x.url.toLowerCase().includes(q) || x.short.toLowerCase().includes(q)));
@@ -449,4 +442,4 @@
     initApp();
   </script>
 </body>
-              </html>
+</html>
