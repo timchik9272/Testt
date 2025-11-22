@@ -196,8 +196,8 @@
     // ID Админа (видит всё)
     const ADMIN_UID = "8626c0b4-d51d-4033-91fe-84d4dffd85a0";
     
-    // Ключ для локального хранилища
-    const LOCAL_STORAGE_KEY = "guest_links";
+    // Ключ для уникальной сессии гостя
+    const GUEST_SESSION_KEY = "vyy_guest_session_id";
 
     // Элементы
     const els = {
@@ -218,6 +218,7 @@
     let currentUser = null;
     let isAdmin = false;
     let allLinks = [];
+    let guestSessionId = null;
 
     // --- UTILS ---
     function generateShortCode(length = 4) {
@@ -225,29 +226,20 @@
       return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
     }
 
-    function getLocalLinks() {
-      try {
-        const links = localStorage.getItem(LOCAL_STORAGE_KEY);
-        return links ? JSON.parse(links) : [];
-      } catch (e) {
-        console.error("Error loading local storage:", e);
-        return [];
-      }
-    }
-
-    function saveLocalLinks(links) {
-      try {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(links));
-      } catch (e) {
-        console.error("Error saving to local storage:", e);
-      }
-    }
-
     // --- AUTH & STATE ---
     async function initApp() {
       const { data: { user } } = await sb.auth.getUser();
       currentUser = user;
       isAdmin = user?.id === ADMIN_UID;
+      
+      // 1. Установка или получение ID гостевой сессии
+      let storedGuestId = localStorage.getItem(GUEST_SESSION_KEY);
+      if (!storedGuestId) {
+        // Генерируем уникальный ID для этой сессии/браузера
+        storedGuestId = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+        localStorage.setItem(GUEST_SESSION_KEY, storedGuestId);
+      }
+      guestSessionId = storedGuestId;
 
       if (user) {
         // User Logged In
@@ -271,33 +263,37 @@
 
     // --- DATA LOADING ---
     async function loadLinks() {
+      // Ключ и значение для фильтрации данных
+      let filterKey;
+      let filterValue;
+      
       if (currentUser) {
-        // Загрузка из Supabase
+        filterKey = "user_id";
+        filterValue = currentUser.id;
         els.listTitle.textContent = isAdmin ? "Все ссылки (Админ)" : "Мои ссылки";
-        els.searchInput.style.display = "block"; // Поиск доступен
-        
-        let query = sb.from("q").select("*").order("id", { ascending: false });
-        if (!isAdmin) {
-          query = query.eq("user_id", currentUser.id);
-        }
-
-        const { data, error } = await query;
-        if (error) {
-          console.error("Error loading links:", error);
-          alert("Ошибка загрузки ссылок из базы данных.");
-          return;
-        }
-
-        allLinks = data || [];
-
       } else {
-        // Загрузка из LocalStorage (Гость)
-        els.listTitle.textContent = "Локальные ссылки (Гость)";
-        els.searchInput.style.display = "none"; // Скрываем поиск для гостей
-        allLinks = getLocalLinks();
-        // ВАЖНО: Модальные окна и действия редактирования/удаления недоступны для локальных ссылок
+        filterKey = "guest_session_id";
+        filterValue = guestSessionId;
+        els.listTitle.textContent = "Ваши ссылки (Гость)";
+      }
+      
+      // Поиск доступен только для авторизованных пользователей
+      els.searchInput.style.display = currentUser ? "block" : "none"; 
+      
+      let query = sb.from("q").select("*").order("id", { ascending: false });
+      
+      if (!isAdmin) {
+        query = query.eq(filterKey, filterValue);
       }
 
+      const { data, error } = await query;
+      if (error) {
+        console.error("Error loading links:", error);
+        alert("Ошибка загрузки ссылок из базы данных.");
+        return;
+      }
+
+      allLinks = data || [];
       renderList(allLinks);
     }
 
@@ -306,9 +302,7 @@
       const showDbActions = !!currentUser; 
 
       if (items.length === 0) {
-        const message = currentUser 
-          ? "У вас пока нет ссылок в базе данных." 
-          : "У вас пока нет локальных ссылок. Они будут видны, пока вы не очистите кэш.";
+        const message = "У вас пока нет ссылок.";
           
         els.linksList.innerHTML = `<div style="text-align:center; padding:20px; color:#9ca3af">${message}</div>`;
         return;
@@ -316,8 +310,16 @@
 
       els.linksList.innerHTML = items.map(item => {
         const shortUrl = `${window.location.origin}/${item.short}`;
-        const ownerBadge = (isAdmin && item.user_id && item.user_id !== currentUser.id) ? `<span style="font-size:10px; background:#eef2ff; padding:2px 6px; border-radius:4px; color:#4f46e5">Чужая</span>` : '';
         
+        let badges = '';
+        if (isAdmin && item.user_id && item.user_id !== currentUser.id) {
+          // Значок "Чужая" для админа, если это ссылка другого пользователя
+          badges += `<span style="font-size:10px; background:#eef2ff; padding:2px 6px; border-radius:4px; color:#4f46e5">Чужая</span>`;
+        } else if (isAdmin && item.guest_session_id) {
+          // Значок "Гость" для админа, если это гостевая ссылка
+          badges += `<span style="font-size:10px; background:#fefce8; padding:2px 6px; border-radius:4px; color:#ca8a04">Гость</span>`;
+        }
+
         const actions = showDbActions ? `
           <button class="action-btn" onclick="openEdit('${item.id}', '${item.url}', '${item.short}')">Изменить</button>
           <button class="action-btn" style="color:#ef4444; border-color:#fecaca" onclick="deleteLink('${item.id}')">Удалить</button>
@@ -327,7 +329,7 @@
           <div class="item">
             <div class="item-row">
               <div class="link-text" style="font-size:18px; font-family:monospace">${window.location.host}/${item.short}</div>
-              ${ownerBadge}
+              ${badges}
             </div>
             <div class="original-link">${item.url}</div>
             
@@ -343,9 +345,9 @@
 
     // --- ACTIONS (для Supabase) ---
     
-    // Эти действия применимы только к ссылкам в базе данных
+    // Эти действия применимы только к ссылкам в базе данных для авторизованных пользователей
     window.deleteLink = async (id) => {
-      if (!currentUser) return; // Защита от случайного вызова для гостя
+      if (!currentUser) return; // Защита от вызова для гостя
       if (confirm("Точно удалить из базы данных?")) {
         const { error } = await sb.from("q").delete().eq("id", id);
         if (!error) loadLinks();
@@ -354,7 +356,7 @@
     };
 
     window.openEdit = (id, url, short) => {
-      if (!currentUser) return; // Защита от случайного вызова для гостя
+      if (!currentUser) return; // Защита от вызова для гостя
       document.getElementById("editLinkId").value = id;
       document.getElementById("editUrlInput").value = url;
       document.getElementById("editShortCode").value = short;
@@ -363,7 +365,6 @@
 
     // Общие утилиты
     window.copyToClip = async (text, btn) => {
-      //... (функция копирования остается без изменений)
       try {
         await navigator.clipboard.writeText(text);
         const originalText = btn.innerText;
@@ -376,7 +377,7 @@
       } catch (e) { alert("Ошибка копирования"); }
     };
 
-    // --- FORM SUBMIT ---
+    // --- FORM SUBMIT (Общая логика для всех) ---
     els.form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const url = els.urlInput.value.trim();
@@ -386,7 +387,7 @@
         code = generateShortCode(4);
       }
 
-      // Проверка уникальности в Supabase (ВАЖНО: нужна для всех, даже для гостей, чтобы не создавать дубликатов)
+      // 2. Проверка уникальности в Supabase
       const { data: exists } = await sb.from("q").select("id").eq("short", code).limit(1);
       if (exists && exists.length > 0) {
         alert("Код " + code + " уже занят в общей базе данных. Выберите другой.");
@@ -395,44 +396,29 @@
 
       const shortUrl = `${window.location.origin}/${code}`;
 
-      if (currentUser) {
-        // --- СОХРАНЕНИЕ В SUPABASE (Пользователь/Админ) ---
-        const payload = { 
-          url: url, 
-          short: code,
-          user_id: currentUser.id 
-        };
+      // 3. Единая логика сохранения в Supabase
+      const payload = { 
+        url: url, 
+        short: code,
+        // Если авторизован, используем user_id. Иначе - null
+        user_id: currentUser ? currentUser.id : null, 
+        // Если гость, используем guestSessionId. Иначе - null
+        guest_session_id: currentUser ? null : guestSessionId
+      };
 
-        const { error } = await sb.from("q").insert([payload]);
-        
-        if (error) {
-          alert("Ошибка сохранения в Supabase: " + error.message);
-        } else {
-          els.urlInput.value = "";
-          els.customCode.value = "";
-          loadLinks();
-        }
+      const { error } = await sb.from("q").insert([payload]);
+      
+      if (error) {
+        alert("Ошибка сохранения в Supabase: " + error.message);
       } else {
-        // --- ЛОКАЛЬНОЕ СОХРАНЕНИЕ (Гость) ---
-        const newLink = { 
-          id: Date.now(), // Используем метку времени как уникальный ID для локального списка
-          url: url, 
-          short: code 
-        };
-        
-        const localLinks = getLocalLinks();
-        // Добавляем новую ссылку в начало списка
-        localLinks.unshift(newLink); 
-        saveLocalLinks(localLinks);
-        
         els.urlInput.value = "";
         els.customCode.value = "";
-        alert(`Ссылка создана локально: ${shortUrl}`);
+        alert(`Ссылка создана: ${shortUrl}`);
         loadLinks();
       }
     });
 
-    // Edit Form Logic (только для Supabase)
+    // Edit Form Logic (только для Supabase, авторизованных пользователей)
     document.getElementById("editForm").onsubmit = async (e) => {
       e.preventDefault();
       if (!currentUser) return;
@@ -451,7 +437,8 @@
     // UI Utilities
     els.refreshBtn.onclick = loadLinks;
     els.searchInput.oninput = (e) => {
-      // Поиск работает только для Supabase (поскольку searchInput скрыт для гостей)
+      // Поиск работает только для авторизованных пользователей (для гостей searchInput скрыт)
+      if (!currentUser) return;
       const q = e.target.value.toLowerCase();
       renderList(allLinks.filter(x => x.url.toLowerCase().includes(q) || x.short.toLowerCase().includes(q)));
     };
@@ -462,4 +449,4 @@
     initApp();
   </script>
 </body>
-</html>
+              </html>
